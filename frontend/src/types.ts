@@ -8,6 +8,13 @@ export interface AttachmentRef {
   thumb?: string | null;
 }
 
+export interface Comment {
+  id: number;
+  author: Author;
+  content: string;
+  created_at: string;
+}
+
 export interface Entry {
   id: number;
   author: Author;
@@ -16,6 +23,7 @@ export interface Entry {
   mood: string | null;
   created_at: string;
   attachments: AttachmentRef[];
+  comments: Comment[];
 }
 
 export type ClothesCategory = 'top' | 'pants' | 'shoes' | 'jewelry' | 'accessory';

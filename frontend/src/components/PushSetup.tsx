@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { IDENTITY_LABEL } from '../identity';
 import type { Author } from '../types';
-
-const OWNER_KEY = 'love-app-owner';
 
 /** VAPID 公钥是 base64url 字符串,subscribe() 要的是 Uint8Array */
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
@@ -23,11 +22,13 @@ function isStandalone(): boolean {
 
 type State = 'checking' | 'unsupported' | 'need-install' | 'off' | 'on' | 'denied';
 
-export default function PushSetup() {
+interface Props {
+  /** 本机身份,由助理页统一管理并传入;开启订阅时用它作为 owner */
+  owner: Author;
+}
+
+export default function PushSetup({ owner }: Props) {
   const [state, setState] = useState<State>('checking');
-  const [owner, setOwner] = useState<Author>(
-    () => (localStorage.getItem(OWNER_KEY) as Author) || 'me'
-  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [endpoint, setEndpoint] = useState<string | null>(null);
@@ -87,7 +88,7 @@ export default function PushSetup() {
           applicationServerKey: urlBase64ToUint8Array(publicKey),
         }));
 
-      localStorage.setItem(OWNER_KEY, owner);
+      // owner 由助理页的身份卡片统一决定
       await api.pushSubscribe(owner, sub.toJSON() as PushSubscriptionJSON);
       setEndpoint(sub.endpoint);
       setState('on');
@@ -116,19 +117,6 @@ export default function PushSetup() {
       setMsg('关闭失败:' + (e instanceof Error ? e.message : ''));
     } finally {
       setBusy(false);
-    }
-  };
-
-  /** 换身份:重新提交一次订阅即可,后端按 endpoint 覆盖 owner */
-  const switchOwner = async (o: Author) => {
-    setOwner(o);
-    localStorage.setItem(OWNER_KEY, o);
-    if (state !== 'on') return;
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-    if (sub) {
-      await api.pushSubscribe(o, sub.toJSON() as PushSubscriptionJSON);
-      setMsg('已切换为:' + (o === 'me' ? '我' : '她'));
     }
   };
 
@@ -175,26 +163,10 @@ export default function PushSetup() {
 
       {(state === 'off' || state === 'on') && (
         <>
-          <div className="push-owner">
-            <span className="push-label">这台手机是</span>
-            <div className="who">
-              <button
-                className={owner === 'me' ? 'on' : ''}
-                onClick={() => switchOwner('me')}
-              >
-                ytf
-              </button>
-              <button
-                className={owner === 'her' ? 'on' : ''}
-                onClick={() => switchOwner('her')}
-              >
-                ljx
-              </button>
-            </div>
-          </div>
           <p className="push-tip">
-            选好身份后开启,<b>只有对方</b>发布新记录时才会推给这台手机,
-            自己发的不会推给自己。
+            当前身份是「<b>{IDENTITY_LABEL[owner]}</b>」,开启后<b>只有对方</b>
+            发布新记录时才会推给这台手机,自己发的不会推给自己。
+            身份可在上方「我是谁」处修改。
           </p>
 
           <div className="c-actions">

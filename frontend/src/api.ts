@@ -1,5 +1,6 @@
 import type {
   Entry,
+  Comment,
   AttachmentRef,
   Author,
   Clothes,
@@ -53,6 +54,11 @@ export const api = {
     jsonReq<{ id: number }>('/api/entries', 'POST', data),
   deleteEntry: (id: number) =>
     fetch(`/api/entries/${id}`, { method: 'DELETE' }).then((r) => handle<{ ok: true }>(r)),
+
+  addComment: (entryId: number, author: Author, content: string) =>
+    jsonReq<Comment>(`/api/entries/${entryId}/comments`, 'POST', { author, content }),
+  deleteComment: (id: number) =>
+    fetch(`/api/comments/${id}`, { method: 'DELETE' }).then((r) => handle<{ ok: true }>(r)),
 
   upload: (file: File) => {
     const fd = new FormData();

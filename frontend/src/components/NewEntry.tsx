@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
 import AudioRecorder from './AudioRecorder';
+import { getIdentity, setIdentity, syncPushOwner, IDENTITY_LABEL } from '../identity';
 import type { AttachmentRef, Author } from '../types';
 
 const MAX_CONTENT = 200;
@@ -11,12 +12,25 @@ interface Props {
 }
 
 export default function NewEntry({ onDone, onCancel }: Props) {
-  const [author, setAuthor] = useState<Author>('me');
+  // 默认用本机已设置的身份发布;从未设过则先给 me,并让选择器显示出来
+  const savedIdentity = getIdentity();
+  const [author, setAuthor] = useState<Author>(savedIdentity ?? 'me');
+  // 设过身份 → 默认收起选择器(自动发布);没设过 → 展开让其选一次
+  const [pickOpen, setPickOpen] = useState<boolean>(savedIdentity === null);
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [atts, setAtts] = useState<AttachmentRef[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // 选择/切换身份:立即落库,并让推送 owner 跟随(保持两处一致)
+  const chooseIdentity = (a: Author) => {
+    setAuthor(a);
+    setIdentity(a);
+    void syncPushOwner(a);
+    setPickOpen(false);
+  };
 
   const addImages = async (files: FileList | null) => {
     if (!files) return;
@@ -55,6 +69,8 @@ export default function NewEntry({ onDone, onCancel }: Props) {
       alert('写点什么，或者加张图吧 ♡');
       return;
     }
+    // 发布前把当前身份记牢(冷启动首次发布也能记住,下次自动)
+    setIdentity(author);
     setBusy(true);
     try {
       await api.createEntry({ author, title, content, attachments: atts });
@@ -68,14 +84,29 @@ export default function NewEntry({ onDone, onCancel }: Props) {
 
   return (
     <div className="composer">
-      <div className="who">
-        <button className={author === 'me' ? 'on' : ''} onClick={() => setAuthor('me')}>
-          狗奴才
-        </button>
-        <button className={author === 'her' ? 'on' : ''} onClick={() => setAuthor('her')}>
-          幸幸陛下
-        </button>
-      </div>
+      {pickOpen ? (
+        <div className="who">
+          <button
+            className={author === 'me' ? 'on' : ''}
+            onClick={() => chooseIdentity('me')}
+          >
+            {IDENTITY_LABEL.me}
+          </button>
+          <button
+            className={author === 'her' ? 'on' : ''}
+            onClick={() => chooseIdentity('her')}
+          >
+            {IDENTITY_LABEL.her}
+          </button>
+        </div>
+      ) : (
+        <div className="who-current">
+          以「<b>{IDENTITY_LABEL[author]}</b>」的身份发布
+          <button className="who-switch" onClick={() => setPickOpen(true)}>
+            切换
+          </button>
+        </div>
+      )}
 
       <input
         className="c-title"
