@@ -1,0 +1,35 @@
+# Caddy 配置:自动申请并续期 HTTPS 证书,反代到后端 3000 端口
+#
+# 放到服务器的 /etc/caddy/Caddyfile,把域名换成你自己的,然后:
+#   sudo systemctl reload caddy
+#
+# 前提:域名的 A 记录已经解析到这台服务器的公网 IP,
+#      并且安全组 + 防火墙放行了 80 和 443(80 用于证书验证,不能只开 443)
+
+your-domain.com {
+	# 上传的图片走 gzip 反而变大,这里只压缩文本
+	encode zstd gzip
+
+	reverse_proxy localhost:3000 {
+		# 让后端能拿到真实来源 IP(server.ts 里开了 trustProxy)
+		header_up X-Real-IP {remote_host}
+	}
+
+	# 图片和音频不会变(文件名是随机哈希),让浏览器长期缓存
+	@uploads path /uploads/*
+	header @uploads Cache-Control "public, max-age=31536000, immutable"
+
+	# Service Worker 绝不能被缓存,否则更新推不下去
+	@sw path /sw.js
+	header @sw Cache-Control "no-cache"
+
+	log {
+		output file /var/log/caddy/love-app.log
+		level WARN
+	}
+}
+
+# 如果想让 www 也能访问,取消下面的注释
+# www.your-domain.com {
+# 	redir https://your-domain.com{uri} permanent
+# }
