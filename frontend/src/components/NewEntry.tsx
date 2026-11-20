@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { api } from '../api';
 import AudioRecorder from './AudioRecorder';
+import LocationPicker from './LocationPicker';
 import { getIdentity, setIdentity, syncPushOwner, IDENTITY_LABEL } from '../identity';
-import type { AttachmentRef, Author } from '../types';
+import type { AttachmentRef, Author, EntryLocation } from '../types';
 
 const MAX_CONTENT = 200;
 
@@ -23,6 +24,8 @@ export default function NewEntry({ onDone, onCancel }: Props) {
   const [atts, setAtts] = useState<AttachmentRef[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [location, setLocation] = useState<EntryLocation | null>(null);
+  const [locationOpen, setLocationOpen] = useState(false);
 
   // 选择/切换身份:立即落库,并让推送 owner 跟随(保持两处一致)
   const chooseIdentity = (a: Author) => {
@@ -73,7 +76,7 @@ export default function NewEntry({ onDone, onCancel }: Props) {
     setIdentity(author);
     setBusy(true);
     try {
-      await api.createEntry({ author, title, content, attachments: atts });
+      await api.createEntry({ author, title, content, attachments: atts, location });
       onDone();
     } catch (e) {
       alert('保存失败：' + (e instanceof Error ? e.message : ''));
@@ -127,6 +130,15 @@ export default function NewEntry({ onDone, onCancel }: Props) {
         {content.length}/{MAX_CONTENT}
       </div>
 
+      {location && (
+        <div className="composer-location">
+          <span aria-hidden="true">⌖</span>
+          <div><small>这件事发生在</small><strong>{location.name}</strong></div>
+          <button type="button" onClick={() => setLocationOpen(true)}>修改</button>
+          <button type="button" onClick={() => setLocation(null)} aria-label="移除地点">×</button>
+        </div>
+      )}
+
       {atts.length > 0 && (
         <div className="att-preview">
           {atts.map((a, i) => (
@@ -158,6 +170,9 @@ export default function NewEntry({ onDone, onCancel }: Props) {
           />
         </label>
         <AudioRecorder onRecorded={addAudio} />
+        <button type="button" className="tool" onClick={() => setLocationOpen(true)}>
+          📍 {location ? '已选地点' : '地点'}
+        </button>
         <div className="spacer" />
         <button className="ghost" onClick={onCancel}>
           取消
@@ -166,6 +181,17 @@ export default function NewEntry({ onDone, onCancel }: Props) {
           {busy ? '保存中...' : '保存'}
         </button>
       </div>
+
+      {locationOpen && (
+        <LocationPicker
+          value={location}
+          onClose={() => setLocationOpen(false)}
+          onChoose={(nextLocation) => {
+            setLocation(nextLocation);
+            setLocationOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

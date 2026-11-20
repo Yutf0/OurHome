@@ -9,7 +9,22 @@ export interface Entry {
   title: string | null;
   content: string | null;
   mood: string | null;
+  location_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
+}
+
+export interface Comment {
+  id: number;
+  entry_id: number;
+  author: Author;
+  content: string;
+  created_at: string;
+}
+
+export interface CommentWithLikes extends Comment {
+  like_authors: Author[];
 }
 
 export interface Attachment {
@@ -24,6 +39,7 @@ export interface Attachment {
 export type AttachmentBrief = Pick<Attachment, 'id' | 'kind' | 'filename' | 'thumb'>;
 export interface EntryWithAttachments extends Entry {
   attachments: AttachmentBrief[];
+  comments: CommentWithLikes[];
 }
 
 export interface CreateEntryBody {
@@ -31,6 +47,9 @@ export interface CreateEntryBody {
   title?: string;
   content?: string;
   mood?: string;
+  location_name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   attachments?: Array<{
     kind?: AttachmentKind;
     filename: string;

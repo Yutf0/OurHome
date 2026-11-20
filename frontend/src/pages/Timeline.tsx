@@ -6,16 +6,49 @@ import type { Entry } from '../types';
 
 interface Props {
   onLogout: () => void;
+  preview?: boolean;
 }
 
-export default function Timeline({ onLogout }: Props) {
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [loading, setLoading] = useState(true);
+const PREVIEW_ENTRY: Entry = {
+  id: 99001,
+  author: 'her',
+  title: '晚风、热栗子，还有我们',
+  content: '散步的时候风有点凉，但刚出炉的栗子很暖。以后看到这个地点，就会想起今天。',
+  mood: null,
+  created_at: '2026-11-20 11:26:00',
+  location_name: '西湖边 · 北山街',
+  latitude: 30.25932,
+  longitude: 120.14845,
+  attachments: [],
+  comments: [
+    {
+      id: 99101,
+      author: 'me',
+      content: '下次还要沿着湖边慢慢走。',
+      created_at: '2026-11-20 11:31:00',
+      like_authors: ['her'],
+    },
+  ],
+};
+
+export default function Timeline({ onLogout, preview = false }: Props) {
+  const [entries, setEntries] = useState<Entry[]>(preview ? [PREVIEW_ENTRY] : []);
+  const [loading, setLoading] = useState(!preview);
   const [composing, setComposing] = useState(false);
   const [q, setQ] = useState('');
   const [activeQ, setActiveQ] = useState('');
 
   const load = (query: string) => {
+    if (preview) {
+      const normalized = query.trim().toLowerCase();
+      setEntries(
+        !normalized || JSON.stringify(PREVIEW_ENTRY).toLowerCase().includes(normalized)
+          ? [PREVIEW_ENTRY]
+          : []
+      );
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     api
       .listEntries(query)
@@ -23,7 +56,7 @@ export default function Timeline({ onLogout }: Props) {
       .catch(() => {})
       .finally(() => setLoading(false));
   };
-  useEffect(() => load(''), []);
+  useEffect(() => load(''), [preview]);
 
   const doSearch = () => {
     setActiveQ(q);
@@ -36,12 +69,20 @@ export default function Timeline({ onLogout }: Props) {
   };
 
   const logout = async () => {
+    if (preview) {
+      onLogout();
+      return;
+    }
     await api.logout();
     onLogout();
   };
 
   const remove = async (id: number) => {
     if (!confirm('确定删掉这条回忆吗？')) return;
+    if (preview) {
+      setEntries((list) => list.filter((e) => e.id !== id));
+      return;
+    }
     await api.deleteEntry(id);
     setEntries((list) => list.filter((e) => e.id !== id));
   };
@@ -116,7 +157,7 @@ export default function Timeline({ onLogout }: Props) {
         )}
 
         {entries.map((e) => (
-          <EntryCard key={e.id} entry={e} onDelete={() => remove(e.id)} />
+          <EntryCard key={e.id} entry={e} onDelete={() => remove(e.id)} preview={preview} />
         ))}
 
         <div className="feed-foot">forever ♡ and always</div>

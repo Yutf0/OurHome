@@ -13,6 +13,7 @@ export interface Comment {
   author: Author;
   content: string;
   created_at: string;
+  like_authors: Author[];
 }
 
 export interface Entry {
@@ -21,9 +22,18 @@ export interface Entry {
   title: string | null;
   content: string | null;
   mood: string | null;
+  location_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
   attachments: AttachmentRef[];
   comments: Comment[];
+}
+
+export interface EntryLocation {
+  name: string;
+  latitude: number;
+  longitude: number;
 }
 
 export type ClothesCategory = 'top' | 'pants' | 'shoes' | 'jewelry' | 'accessory';

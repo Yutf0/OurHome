@@ -13,6 +13,9 @@ db.exec(`
     title       TEXT,
     content     TEXT,
     mood        TEXT,
+    location_name TEXT,
+    latitude    REAL,
+    longitude   REAL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -44,6 +47,23 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS comments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id    INTEGER NOT NULL,
+    author      TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS comment_likes (
+    comment_id  INTEGER NOT NULL,
+    author      TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (comment_id, author),
+    FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
+  );
+
   -- 推送订阅:一台设备一条,endpoint 唯一
   CREATE TABLE IF NOT EXISTS push_subscriptions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,4 +79,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_entries_created ON entries(created_at);
   CREATE INDEX IF NOT EXISTS idx_clothes_cat ON clothes(category, subcategory);
   CREATE INDEX IF NOT EXISTS idx_push_owner ON push_subscriptions(owner);
+  CREATE INDEX IF NOT EXISTS idx_comments_entry ON comments(entry_id, id);
+  CREATE INDEX IF NOT EXISTS idx_comment_likes_comment ON comment_likes(comment_id);
 `);
+
+// 旧数据库在启动时原地补列，保留已有日常、照片和衣柜数据。
+const entryColumns = new Set(
+  (db.prepare('PRAGMA table_info(entries)').all() as Array<{ name: string }>).map((column) =>
+    column.name
+  )
+);
+if (!entryColumns.has('location_name')) db.exec('ALTER TABLE entries ADD COLUMN location_name TEXT');
+if (!entryColumns.has('latitude')) db.exec('ALTER TABLE entries ADD COLUMN latitude REAL');
+if (!entryColumns.has('longitude')) db.exec('ALTER TABLE entries ADD COLUMN longitude REAL');

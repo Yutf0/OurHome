@@ -7,6 +7,7 @@ import type { Entry, Comment, Author } from '../types';
 interface Props {
   entry: Entry;
   onDelete: () => void;
+  preview?: boolean;
 }
 
 function formatTime(s: string | null): string {
@@ -32,7 +33,7 @@ function formatShort(s: string): string {
   });
 }
 
-export default function EntryCard({ entry, onDelete }: Props) {
+export default function EntryCard({ entry, onDelete, preview = false }: Props) {
   const imgs = entry.attachments.filter((a) => a.kind === 'image');
   const audios = entry.attachments.filter((a) => a.kind === 'audio');
 
@@ -45,12 +46,32 @@ export default function EntryCard({ entry, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [liking, setLiking] = useState<Set<number>>(() => new Set());
+
+  const locationUrl =
+    entry.latitude !== null && entry.longitude !== null
+      ? `https://maps.apple.com/?ll=${entry.latitude},${entry.longitude}&q=${encodeURIComponent(entry.location_name || '日常发生地点')}`
+      : null;
 
   const send = async () => {
     const t = text.trim();
     if (!t || busy) return;
     setBusy(true);
     try {
+      if (preview) {
+        setComments((list) => [
+          ...list,
+          {
+            id: Date.now(),
+            author: me,
+            content: t,
+            created_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+            like_authors: [],
+          },
+        ]);
+        setText('');
+        return;
+      }
       const c = await api.addComment(entry.id, me, t);
       setComments((list) => [...list, c]);
       setText('');
@@ -64,10 +85,50 @@ export default function EntryCard({ entry, onDelete }: Props) {
   const removeComment = async (id: number) => {
     if (!confirm('删除这条评论？')) return;
     try {
+      if (preview) {
+        setComments((list) => list.filter((c) => c.id !== id));
+        return;
+      }
       await api.deleteComment(id);
       setComments((list) => list.filter((c) => c.id !== id));
     } catch (e) {
       alert('删除失败：' + (e instanceof Error ? e.message : ''));
+    }
+  };
+
+  const toggleLike = async (id: number) => {
+    if (liking.has(id)) return;
+    if (preview) {
+      setComments((list) =>
+        list.map((comment) => {
+          if (comment.id !== id) return comment;
+          const likes = comment.like_authors ?? [];
+          return {
+            ...comment,
+            like_authors: likes.includes(me)
+              ? likes.filter((author) => author !== me)
+              : [...likes, me],
+          };
+        })
+      );
+      return;
+    }
+    setLiking((current) => new Set(current).add(id));
+    try {
+      const result = await api.toggleCommentLike(id, me);
+      setComments((list) =>
+        list.map((comment) =>
+          comment.id === id ? { ...comment, like_authors: result.like_authors } : comment
+        )
+      );
+    } catch (e) {
+      alert('点赞失败：' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setLiking((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -112,10 +173,17 @@ export default function EntryCard({ entry, onDelete }: Props) {
 
       {/* 评论区 */}
       <div className="cmt">
-        <button className="cmt-toggle" onClick={() => setOpen((v) => !v)}>
-          💬 {comments.length > 0 ? `${comments.length} 条评论` : '评论'}
-          <span className={`cmt-arrow ${open ? 'up' : ''}`}>▾</span>
-        </button>
+        <div className="card-footline">
+          <button className="cmt-toggle" onClick={() => setOpen((v) => !v)}>
+            💬 {comments.length > 0 ? `${comments.length} 条评论` : '评论'}
+            <span className={`cmt-arrow ${open ? 'up' : ''}`}>▾</span>
+          </button>
+          {entry.location_name && locationUrl && (
+            <a className="entry-location" href={locationUrl} target="_blank" rel="noreferrer">
+              <span aria-hidden="true">⌖</span>{entry.location_name}
+            </a>
+          )}
+        </div>
 
         {open && (
           <div className="cmt-panel">
@@ -130,6 +198,16 @@ export default function EntryCard({ entry, onDelete }: Props) {
                       <div className="cmt-text">{c.content}</div>
                       <div className="cmt-meta">
                         <span>{formatShort(c.created_at)}</span>
+                        <button
+                          type="button"
+                          className={`cmt-like ${(c.like_authors ?? []).includes(me) ? 'on' : ''}`}
+                          onClick={() => toggleLike(c.id)}
+                          disabled={liking.has(c.id)}
+                          aria-label={(c.like_authors ?? []).includes(me) ? '取消点赞' : '点赞'}
+                        >
+                          <span aria-hidden="true">♥</span>
+                          {(c.like_authors ?? []).length > 0 && <b>{c.like_authors.length}</b>}
+                        </button>
                         {c.author === me && (
                           <button
                             className="cmt-del"

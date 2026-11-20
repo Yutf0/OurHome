@@ -12,6 +12,7 @@ import { registerUploadRoutes } from './routes/uploads.js';
 import { registerClothesRoutes } from './routes/clothes.js';
 import { registerAnniversaryRoutes } from './routes/anniversaries.js';
 import { registerPushRoutes, pushEnabled } from './push.js';
+import { registerShenlunRoutes } from './routes/exclusive/shenlun.js';
 
 const app = Fastify({
   logger: true,
@@ -37,6 +38,7 @@ registerUploadRoutes(app);
 registerClothesRoutes(app);
 registerAnniversaryRoutes(app);
 registerPushRoutes(app);
+registerShenlunRoutes(app);
 
 if (config.serveFrontend && fs.existsSync(config.frontendDist)) {
   await app.register(fastifyStatic, {

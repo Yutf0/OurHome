@@ -2,6 +2,7 @@ import type {
   Entry,
   Comment,
   AttachmentRef,
+  EntryLocation,
   Author,
   Clothes,
   ClothesCategory,
@@ -9,6 +10,7 @@ import type {
   AnniversaryItem,
   Holiday,
 } from './types';
+import type { DemoReport } from './features/exclusive/shenlun/types';
 
 async function handle<T>(r: Response): Promise<T> {
   if (r.ok) return (await r.json()) as T;
@@ -29,6 +31,7 @@ export interface CreateEntryInput {
   title: string;
   content: string;
   attachments: AttachmentRef[];
+  location: EntryLocation | null;
 }
 
 export interface ClothesInput {
@@ -51,7 +54,12 @@ export const api = {
       (r) => handle<Entry[]>(r)
     ),
   createEntry: (data: CreateEntryInput) =>
-    jsonReq<{ id: number }>('/api/entries', 'POST', data),
+    jsonReq<{ id: number }>('/api/entries', 'POST', {
+      ...data,
+      location_name: data.location?.name ?? null,
+      latitude: data.location?.latitude ?? null,
+      longitude: data.location?.longitude ?? null,
+    }),
   deleteEntry: (id: number) =>
     fetch(`/api/entries/${id}`, { method: 'DELETE' }).then((r) => handle<{ ok: true }>(r)),
 
@@ -59,6 +67,12 @@ export const api = {
     jsonReq<Comment>(`/api/entries/${entryId}/comments`, 'POST', { author, content }),
   deleteComment: (id: number) =>
     fetch(`/api/comments/${id}`, { method: 'DELETE' }).then((r) => handle<{ ok: true }>(r)),
+  toggleCommentLike: (id: number, author: Author) =>
+    jsonReq<{ liked: boolean; like_count: number; like_authors: Author[] }>(
+      `/api/comments/${id}/likes`,
+      'POST',
+      { author }
+    ),
 
   upload: (file: File) => {
     const fd = new FormData();
@@ -96,6 +110,11 @@ export const api = {
       handle<{ ok: true }>(r)
     ),
   listHolidays: () => fetch('/api/holidays').then((r) => handle<Holiday[]>(r)),
+
+  reviewShenlun: (data: FormData) =>
+    fetch('/api/exclusive/shenlun/review', { method: 'POST', body: data }).then((r) =>
+      handle<DemoReport>(r)
+    ),
 
   /* ===== 推送 ===== */
   pushKey: () =>

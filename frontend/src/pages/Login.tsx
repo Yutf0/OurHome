@@ -27,7 +27,10 @@ export default function Login({ onSuccess }: Props) {
   return (
     <div className="login">
       <div className="login-card">
-        <div className="login-heart">🐰</div>
+        <div className="login-avatar">
+          <img src="/login-cat.jpg" alt="小猫头像" />
+          <span aria-hidden="true">♡</span>
+        </div>
         <h1>我们的小屋</h1>
         <p className="login-sub">记录属于我们的每一天</p>
         <input

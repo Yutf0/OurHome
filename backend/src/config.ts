@@ -33,6 +33,12 @@ export const config = {
 
   // 推送文案里显示的称呼,改成你们自己的昵称
   authorNames: { me: '我', her: '她' } as Record<Author, string>,
+
+  /* ===== 专属 / 申论批改 ===== */
+  kimiApiKey: process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY || '',
+  kimiModel: process.env.KIMI_MODEL || 'kimi-k3.1-pro',
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY || '',
+  deepseekModel: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
 };
 
 export const UPLOAD_DIR = path.join(config.dataDir, 'uploads');

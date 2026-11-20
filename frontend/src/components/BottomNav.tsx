@@ -1,10 +1,11 @@
-export type Tab = 'home' | 'wardrobe' | 'days' | 'ai';
+export type Tab = 'home' | 'wardrobe' | 'days' | 'ai' | 'exclusive';
 
 const TABS: Array<{ key: Tab; label: string; icon: string }> = [
   { key: 'home', label: '日常', icon: '🐰' },
   { key: 'wardrobe', label: '衣柜', icon: '🧸' },
   { key: 'days', label: '纪念日', icon: '🍓' },
   { key: 'ai', label: '助理', icon: '🐱' },
+  { key: 'exclusive', label: '专属', icon: '🌷' },
 ];
 
 interface Props {
