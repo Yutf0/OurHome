@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { EntryLocation } from '../types';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../lib/coords';
 
 interface Props {
   value: EntryLocation | null;
@@ -9,22 +10,31 @@ interface Props {
   onClose: () => void;
 }
 
-interface NominatimResult {
-  display_name?: string;
-  name?: string;
-  address?: Record<string, string | undefined>;
+interface BdcResult {
+  city?: string;
+  locality?: string;
+  principalSubdivision?: string;
+  localityInfo?: {
+    administrative?: Array<{ name?: string }>;
+  };
 }
 
-function placeName(result: NominatimResult, latitude: number, longitude: number): string {
-  const address = result.address ?? {};
-  const pieces = [
-    result.name || address.amenity || address.building || address.shop || address.tourism,
-    address.road || address.pedestrian,
-    address.suburb || address.neighbourhood || address.city_district || address.district,
-    address.city || address.town || address.county,
-  ].filter((item, index, list): item is string => Boolean(item) && list.indexOf(item) === index);
-  if (pieces.length) return pieces.slice(0, 3).join(' · ');
-  if (result.display_name) return result.display_name.split(',').slice(0, 3).join(' · ');
+function placeName(result: BdcResult, latitude: number, longitude: number): string {
+  const admin = (result.localityInfo?.administrative ?? [])
+    .map((item) => item.name)
+    .filter(
+      (item): item is string =>
+        typeof item === 'string' && item.length > 0 && !/^(中华人民共和国|中国)$/.test(item)
+    );
+
+  // BigDataCloud 的 administrative 从大到小排列，取最具体的 3 级：街道 · 区 · 市
+  const pieces = admin.slice(-3).reverse();
+  if (pieces.length) return pieces.join(' · ');
+
+  const fallback = [result.locality, result.city, result.principalSubdivision].filter(
+    (item): item is string => Boolean(item)
+  );
+  if (fallback.length) return fallback.join(' · ');
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
@@ -48,22 +58,26 @@ export default function LocationPicker({ value, onChoose, onClose }: Props) {
     const currentRequest = ++requestId.current;
 
     if (map.current) {
+      // 数据库里是 WGS-84，高德瓦片是 GCJ-02，显示时转换
+      const shown = wgs84ToGcj02(latitude, longitude);
       const icon = L.divIcon({
         className: 'location-pin-wrap',
         html: '<span class="location-pin"><i></i></span>',
         iconSize: [34, 42],
         iconAnchor: [17, 40],
       });
-      if (marker.current) marker.current.setLatLng([latitude, longitude]);
-      else marker.current = L.marker([latitude, longitude], { icon }).addTo(map.current);
+      if (marker.current) marker.current.setLatLng([shown.latitude, shown.longitude]);
+      else
+        marker.current = L.marker([shown.latitude, shown.longitude], { icon }).addTo(map.current);
     }
 
     try {
+      // 国内可用的免 Key 逆地理编码；输入 WGS-84，返回中文地名
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=zh-CN`
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=zh`
       );
       if (!response.ok) throw new Error('reverse geocoding failed');
-      const result = (await response.json()) as NominatimResult;
+      const result = (await response.json()) as BdcResult;
       if (currentRequest !== requestId.current) return;
       setName(placeName(result, latitude, longitude));
       setMessage('位置已选好，也可以修改下面显示的地点名称。');
@@ -79,20 +93,32 @@ export default function LocationPicker({ value, onChoose, onClose }: Props) {
   useEffect(() => {
     if (!mapElement.current || map.current) return;
     const initialCenter: L.LatLngExpression = value
-      ? [value.latitude, value.longitude]
+      ? (() => {
+          const shown = wgs84ToGcj02(value.latitude, value.longitude);
+          return [shown.latitude, shown.longitude] as [number, number];
+        })()
       : [35.8617, 104.1954];
     const instance = L.map(mapElement.current, {
       zoomControl: false,
       attributionControl: true,
     }).setView(initialCenter, value ? 16 : 4);
     map.current = instance;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
-    }).addTo(instance);
+    // 高德瓦片：国内直连、中文注记，无需 Key。
+    // 如果以后申请了高德官方 Key，可换成 AMap JS API。
+    L.tileLayer(
+      'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+      {
+        subdomains: ['1', '2', '3', '4'],
+        minZoom: 3,
+        maxZoom: 18,
+        attribution: '&copy; 高德地图',
+      }
+    ).addTo(instance);
     L.control.zoom({ position: 'bottomright' }).addTo(instance);
     instance.on('click', (event: L.LeafletMouseEvent) => {
-      void chooseCoordinates(event.latlng.lat, event.latlng.lng);
+      // 高德瓦片上点选得到的是 GCJ-02，转回 WGS-84 再保存
+      const wgs = gcj02ToWgs84(event.latlng.lat, event.latlng.lng);
+      void chooseCoordinates(wgs.latitude, wgs.longitude);
     });
     if (value) void chooseCoordinates(value.latitude, value.longitude);
 
@@ -114,9 +140,11 @@ export default function LocationPicker({ value, onChoose, onClose }: Props) {
     setMessage('正在向 iPhone 请求定位…');
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        // 浏览器定位返回 WGS-84，显示到高德地图上时转成 GCJ-02
         const { latitude, longitude } = position.coords;
+        const shown = wgs84ToGcj02(latitude, longitude);
         setLocating(false);
-        map.current?.setView([latitude, longitude], 17, { animate: true });
+        map.current?.setView([shown.latitude, shown.longitude], 17, { animate: true });
         void chooseCoordinates(latitude, longitude);
       },
       (error) => {
